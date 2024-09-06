@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os.path
+from multiprocessing import Pool
 from typing import Iterator
 
 from google.auth.transport.requests import Request
@@ -39,10 +40,14 @@ class GMailClient:
             ).execute()
             page_token = results.get('nextPageToken', None)
             messages = results['messages']
-            # TODO get() the messages
             yield from messages
             if not page_token:
                 break
+
+    def get_message(self, message_id: str, message_format: str = 'raw') -> dict:
+        message = self._gmail_service.users().messages().get(
+            userId='me', id=message_id, format=message_format).execute()
+        return message
 
     def label_ids_by_name(self) -> dict[str, str]:
         labels = self.list_labels()
@@ -51,6 +56,16 @@ class GMailClient:
     def label_message_count(self, label_id: str) -> int:
         label = self.get_label(label_id)
         return label['messagesTotal']
+
+    def for_each_message(
+            self, query: str | None = None, label_ids: list[str] | None = None, include_spam_and_trash: bool = True
+    ) -> Iterator[dict]:
+        messages = self.list_messages(query, label_ids, include_spam_and_trash)
+        with Pool() as pool:
+            yield from pool.imap(self._get_message_by_instance, messages, 50)
+
+    def _get_message_by_instance(self, message: dict):
+        return self.get_message(message['id'])
 
 
 def load_credentials() -> Credentials:
@@ -80,10 +95,12 @@ def main():
     gmail = GMailClient(load_credentials())
     expected_total = gmail.label_message_count('IMPORTANT')
     processed = 0
-    for message in gmail.list_messages(label_ids=['IMPORTANT']):
+    raw_bytes_downloaded = 0
+    for message in gmail.for_each_message(label_ids=['IMPORTANT']):
         if processed % 100 == 0:
-            print(f'{processed} / {expected_total}')
+            print(f'{processed} / {expected_total}', raw_bytes_downloaded)
         processed += 1
+        raw_bytes_downloaded += len(message.get('raw', ''))
 
 
 if __name__ == "__main__":
