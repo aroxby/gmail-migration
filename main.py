@@ -55,6 +55,9 @@ class GMailClient:
         self._gmail_service.users().messages().insert(
             userId='me', internalDateSource='dateHeader', body=message).execute()
 
+    def import_message(self, message: dict) -> None:
+        self._gmail_service.users().messages().import_(userId='me', neverMarkSpam=True, body=message).execute()
+
     def label_ids_by_name(self) -> dict[str, str]:
         labels = self.list_labels()
         return {label['name']: label['id'] for label in labels['labels']}
@@ -130,6 +133,9 @@ def main():
     for idx, message in enumerate(src.for_each_message(label_ids=[src_label_id])):
         message['labelIds'] = list_replace(message['labelIds'], src_label_id, dst_label_id)
         drop_keys(message, ['id', 'threadId', 'historyId'])
+        # Note that you can't create threads in the GMail API
+        # When a message is imported we should record the new thread ID and then
+        # create a mapping (old thread id to new thread id) for future messages
         dst.insert_message(message)
         if idx % 100 == 0:
             print(f'{idx} / {expected_total}')
