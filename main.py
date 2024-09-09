@@ -51,7 +51,8 @@ class GMailClient:
         return message
 
     def insert_message(self, message: dict) -> None:
-        self._gmail_service.users().messages().insert(userId='me', body=message).execute()
+        self._gmail_service.users().messages().insert(
+            userId='me', internalDateSource='dateHeader', body=message).execute()
 
     def label_ids_by_name(self) -> dict[str, str]:
         labels = self.list_labels()
