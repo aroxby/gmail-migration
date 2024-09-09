@@ -5,6 +5,7 @@ import sys
 from typing import Iterator
 
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -84,9 +85,11 @@ def load_credentials(nickname) -> Credentials:
     # If there are no (valid) credentials available, let the user log in.
     if not credentials or not credentials.valid:
         if credentials and credentials.expired and credentials.refresh_token:
-            # TODO: Catch the error for expired refresh token
-            # maybe google.auth.exceptions.RefreshError
-            credentials.refresh(Request())
+            try:
+                credentials.refresh(Request())
+            except RefreshError:
+                # If the refresh token fails, fall into the flow below for a new token
+                pass
         if not credentials or not credentials.valid:
             flow = InstalledAppFlow.from_client_secrets_file(
                     'credentials.json', SCOPES
